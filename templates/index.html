@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exam Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+        }
+        .question-container {
+            margin-bottom: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .question-number {
+            font-weight: bold;
+        }
+        .question-text {
+            margin: 10px 0;
+        }
+        .answer-input {
+            margin-top: 10px;
+            display: block;
+        }
+        .options {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+        .radio-option {
+            margin-bottom: 10px;
+        }
+        button {
+            margin: 10px 5px;
+            padding: 10px 15px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .message {
+            margin: 10px 0;
+            color: green;
+            font-weight: bold;
+        }
+        .topic-input-container {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Andrew Wheatley's Exam Generator</h1>
+    <div id="controls">
+        <button id="initialize-btn" onclick="initializeGraph()">Upload Textbook</button>
+        <div>
+            <label for="folder-path-input">Enter Folder Path:</label>
+            <input id="folder-path-input" type="text" placeholder="e.g., C:\Users\Andrew\..." style="width: 400px; padding: 5px;" />
+            <button id="save-folder-path" onclick="saveFolderPath()">Save Folder Path</button>
+        </div>
+        <div>
+            <label for="api-key-input">Enter API Key:</label>
+            <input id="api-key-input" type="text" placeholder="Enter your API key here" style="width: 300px; padding: 5px;" />
+        </div>
+        <div class="topic-input-container">
+            <input id="topic-input" type="text" placeholder="Enter topic for the exam" style="width: 300px; padding: 5px;" />
+            <button id="execute-graph-btn" onclick="executeGraph()">Execute Graph</button>
+        </div>
+        <button id="load-exam-btn" onclick="loadExam()" disabled>Generate Exam</button>
+    </div>
+    <div id="message" class="message"></div>
+    <div id="exam-container"></div>
+    <button id="submit-btn" onclick="submitAnswers()" disabled>Submit Answers</button>
+
+    <script>
+        // Initialize the graph
+        async function initializeGraph() {
+            try {
+                console.log("Initializing graph...");
+                const response = await fetch('/initialize', { method: 'POST' });
+                const data = await response.json();
+
+                if (response.ok) {
+                    console.log("Graph initialized successfully:", data);
+                    document.getElementById('message').textContent = "Graph initialized successfully.";
+                    document.getElementById('initialize-btn').disabled = true;
+                    document.getElementById('topic-input').disabled = false;
+                    document.getElementById('load-exam-btn').disabled = false;
+                } else {
+                    document.getElementById('message').textContent = "Error initializing graph: " + data.error;
+                    console.error("Error initializing graph:", data);
+                }
+            } catch (error) {
+                console.error("Failed to initialize graph:", error);
+                document.getElementById('message').textContent = "Failed to initialize graph.";
+            }
+        }
+
+        // Save the folder path
+        async function saveFolderPath() {
+            const folderPath = document.getElementById('folder-path-input').value.trim();
+            if (!folderPath) {
+                document.getElementById('message').textContent = "Please enter a folder path.";
+                return;
+            }
+
+            try {
+                const response = await fetch('/select_folder', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folderPath })
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    document.getElementById('message').textContent = `Folder path saved: ${data.folderPath}`;
+                } else {
+                    document.getElementById('message').textContent = `Error: ${data.error}`;
+                }
+            } catch (error) {
+                console.error("Error saving folder path:", error);
+                document.getElementById('message').textContent = "Error saving folder path.";
+            }
+        }
+
+        // Execute the graph with the given topic
+        async function executeGraph() {
+            const topic = document.getElementById('topic-input').value.trim();
+            if (!topic) {
+                document.getElementById('message').textContent = "Please enter a topic.";
+                return;
+            }
+
+            try {
+                console.log("Executing graph with topic:", topic);
+                const response = await fetch('/execute', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ topic })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    document.getElementById('message').textContent = "Graph executed successfully.";
+                    console.log("Graph execution result:", data);
+
+                    // Display the exam in the exam-container
+                    const examContainer = document.getElementById('exam-container');
+                    examContainer.innerHTML = ""; // Clear existing content
+                    if (data.exam) {
+                        data.exam.questions.forEach((question, index) => {
+                            const questionElement = document.createElement('div');
+                            questionElement.classList.add('question-container');
+                            questionElement.innerHTML = `
+                                <div class="question-number">Question ${index + 1}</div>
+                                <div class="question-text">${question.text}</div>
+                                <textarea class="answer-input" data-question-index="${index}" placeholder="Type your answer here..."></textarea>
+                            `;
+                            examContainer.appendChild(questionElement);
+                        });
+
+                        // Enable the submit button
+                        document.getElementById('submit-btn').disabled = false;
+                    }
+                } else {
+                    document.getElementById('message').textContent = "Error executing graph: " + data.error;
+                    console.error("Error executing graph:", data);
+                }
+            } catch (error) {
+                console.error("Failed to execute graph:", error);
+                document.getElementById('message').textContent = "Failed to execute graph.";
+            }
+        }
+
+        // Submit answers to the server
+        async function submitAnswers() {
+            const answers = {};
+            const answerInputs = document.querySelectorAll('.answer-input');
+
+            answerInputs.forEach((input) => {
+                const questionIndex = input.getAttribute('data-question-index');
+                answers[questionIndex] = input.value.trim();
+            });
+
+            try {
+                console.log("Submitting answers:", answers);
+                const response = await fetch('/submit_answers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(answers)
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    document.getElementById('message').textContent = "Answers submitted successfully.";
+                    console.log("Answers submission feedback:", data.feedback);
+                } else {
+                    document.getElementById('message').textContent = "Error submitting answers: " + data.error;
+                    console.error("Error submitting answers:", data);
+                }
+            } catch (error) {
+                console.error("Failed to submit answers:", error);
+                document.getElementById('message').textContent = "Failed to submit answers.";
+            }
+        }
+    </script>
+</body>
+</html>
